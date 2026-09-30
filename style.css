@@ -1,0 +1,243 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  cursor: none !important;
+}
+
+canvas {
+  display: block;
+}
+
+/* ---------- Negative cursor ---------- */
+#cursor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  mix-blend-mode: difference;
+  pointer-events: none;
+  z-index: 1000;
+  will-change: transform;
+  transition: opacity 0.2s ease;
+}
+
+/* ---------- LAB overlay ---------- */
+#lab {
+  --gutter: clamp(16px, 3vw, 40px);        /* page edges + gap between columns */
+  --stack: clamp(24px, 4vw, 56px);         /* gap between images in a column */
+  --row-gap: clamp(48px, 8vw, 110px);      /* gap between image rows */
+  --stagger: clamp(60px, 14vw, 220px);     /* how far the offset column drops */
+
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: #fff;
+  color: #000;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: Helvetica, Arial, sans-serif;
+  font-weight: bold;
+  text-transform: uppercase;
+  -webkit-font-smoothing: antialiased;
+
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.6s ease, visibility 0s linear 0.6s;
+}
+
+#lab.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.6s ease;
+}
+
+#lab button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+/* Header inverts whatever scrolls beneath it */
+#lab .lab-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  padding: 28px var(--gutter);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: #fff;
+  mix-blend-mode: difference;
+}
+
+#lab .lab-main {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 140px var(--gutter) 80px;
+}
+
+/* ---------- Project header ---------- */
+#lab .project + .project {
+  margin-top: 200px;
+}
+
+#lab .project-head {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+  margin-bottom: 48px;
+}
+
+#lab .project-year {
+  font-size: 14px;
+}
+
+#lab h1 {
+  margin: 0;
+  font-size: clamp(40px, 9vw, 140px);
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+}
+
+#lab .project-info {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: var(--gutter);
+  margin-bottom: clamp(72px, 10vw, 140px);
+}
+
+#lab .project-meta p {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  opacity: 0.5;
+}
+
+#lab .project-text p {
+  margin: 0 0 1.1em;
+  max-width: 60ch;
+  font-size: clamp(14px, 1.3vw, 18px);
+  line-height: 1.4;
+}
+
+#lab .project-text p:last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- Photo layout ---------- */
+#lab .block {
+  margin-bottom: var(--row-gap);
+}
+
+#lab .grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: var(--gutter);
+  align-items: start;
+}
+
+#lab .grid .col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stack);
+  min-width: 0;
+}
+
+/* Staggered column starts lower */
+#lab .grid.offset-left  .col:first-child { padding-top: var(--stagger); }
+#lab .grid.offset-right .col:last-child  { padding-top: var(--stagger); }
+
+#lab figure {
+  margin: 0;
+}
+
+#lab .frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+#lab .frame.crop {
+  overflow: hidden;
+}
+
+#lab .frame.crop img {
+  height: 100%;
+  object-fit: cover;
+}
+
+#lab .video {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+#lab .video iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+#lab figcaption {
+  margin-top: 12px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- Scroll reveal ---------- */
+#lab .reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 1.2s ease, transform 1.2s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+#lab .reveal.in {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---------- Footer ---------- */
+#lab .lab-footer {
+  display: flex;
+  justify-content: center;
+  padding: 40px var(--gutter) 120px;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- Mobile: single column ---------- */
+@media (max-width: 700px) {
+  #lab .lab-header { padding: 20px 16px; }
+  #lab .lab-main   { padding: 100px 16px 60px; }
+
+  #lab .project-info {
+    grid-template-columns: 1fr;
+    row-gap: 28px;
+  }
+
+  #lab .grid {
+    grid-template-columns: 1fr;
+    row-gap: var(--stack);
+  }
+
+  #lab .grid .col { padding-top: 0 !important; }
+}
