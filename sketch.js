@@ -21,6 +21,23 @@ const CURSOR_PRESS_SIZE = 12;
 const CURSOR_FOLLOW     = 0.5;
 const CURSOR_SIZE_EASE  = 0.2;
 
+// Touch devices (phones/tablets): no hover, no custom cursor
+const IS_TOUCH = window.matchMedia('(hover: none)').matches;
+
+// Add a mobile viewport tag (the editor's index.html doesn't have one).
+// Runs immediately, before p5 measures the window.
+addViewportMeta();
+
+function addViewportMeta() {
+  let m = document.querySelector('meta[name="viewport"]');
+  if (!m) {
+    m = document.createElement('meta');
+    m.name = 'viewport';
+    document.head.appendChild(m);
+  }
+  m.content = 'width=device-width, initial-scale=1, viewport-fit=cover';
+}
+
 // ==================================================
 //  ABOUT COPY: pick 'A', 'B', 'C' or 'D'
 // ==================================================
@@ -51,17 +68,6 @@ const ABOUT_VERSIONS = {
   ],
 };
 
-// ==================================================
-//  LAB PROJECTS
-//  blocks:
-//    grid  { left: [media], right: [media], offset: 'left' | 'right' }
-//          -> two columns; the offset column starts lower (staggered)
-//    full  { src, ratio?, alt? }         -> one image, full width
-//    video { youtube, caption? }         -> full-width YouTube embed
-//  media items inside a grid:
-//    { src, ratio?: '3 / 4', alt? }      -> image (ratio = crop shape)
-//    { youtube, caption? }               -> video
-// ==================================================
 // ==================================================
 //  LAB PROJECTS
 //  blocks:
@@ -147,14 +153,16 @@ let ready = false;
 let hovered = null;          // 'about' | 'lab' | null
 let active = null;           // 'about' when bio is showing
 let aboutLayout;
+let touchHold = null;        // half currently under a finger (touch devices)
+let resizeTimer;
 
 // LAB state: 'closed' | 'opening' | 'open' | 'closingOverlay' | 'closing'
 let labState = 'closed';
 let expand = 0;
 let labEl, revealObserver;
 
-// Cursor
-let cursorEl;
+// Cursor (desktop only)
+let cursorEl = null;
 let mx = -100, my = -100;
 let cx = -100, cy = -100;
 let cSize = CURSOR_SIZE;
@@ -170,11 +178,12 @@ const halves = {
 // --------------------------------------------------
 function setup() {
   const cnv = createCanvas(windowWidth, windowHeight);
+  pixelDensity(min(displayDensity(), 2));   // keeps phones fast
   textFont(FONT);
   textAlign(CENTER, CENTER);
-  cnv.mousePressed(handleCanvasClick);
 
-  setupCursor();
+  setupInput(cnv.elt);
+  if (!IS_TOUCH) setupCursor();
   buildLab();
 
   loadImage(IMAGE_PATH, (img) => {
@@ -189,6 +198,10 @@ function setup() {
 //  Background buffers
 // --------------------------------------------------
 function buildBuffers() {
+  // Remove old buffers so resizing doesn't pile up memory
+  if (normalBuf) normalBuf.remove();
+  if (invertBuf) invertBuf.remove();
+
   normalBuf = createGraphics(width, height);
   drawCover(normalBuf, bgImg);
 
@@ -242,12 +255,13 @@ function halfAt(px, py) {
 // --------------------------------------------------
 function buildAboutLayout() {
   const a = getRects().about;
+  const narrow = a.w < 600;
   aboutLayout = layoutText(ABOUT_VERSIONS[ABOUT_VERSION], a, {
     align: LEFT,
     style: BOLD,
     size: constrain(min(a.w, a.h) * 0.034, 11, 22),
-    minSize: 8,
-    widthFactor: 0.72,
+    minSize: 9,
+    widthFactor: narrow ? 0.84 : 0.72,
   });
 }
 
@@ -322,8 +336,12 @@ function draw() {
 
   const rects = getRects();
 
+  // Hover on desktop, finger-down on touch
   hovered = null;
-  if (cursorVisible && labState === 'closed') hovered = halfAt(mx, my);
+  if (labState === 'closed') {
+    if (IS_TOUCH) hovered = touchHold;
+    else if (cursorVisible) hovered = halfAt(mx, my);
+  }
 
   // ---- LAB transition targets ----
   const labOn = labState === 'opening' || labState === 'open' || labState === 'closingOverlay';
@@ -337,7 +355,7 @@ function draw() {
     expand = 0;
   }
 
-  image(normalBuf, 0, 0);
+  image(normalBuf, 0, 0, width, height);
 
   for (const key in rects) {
     const r = rects[key];
@@ -355,7 +373,7 @@ function draw() {
       drawingContext.rect(r.x, r.y, r.w, r.h);
       drawingContext.clip();
       tint(255, h.inv * 255);
-      image(invertBuf, 0, 0);
+      image(invertBuf, 0, 0, width, height);
       noTint();
       drawingContext.restore();
     }
@@ -499,21 +517,23 @@ function blockHTML(b) {
         <div class="col">${(b.right || []).map(mediaHTML).join('')}</div>
       </div>`;
   }
-  if (b.type === 'full')  return `<div class="block">${mediaHTML(b)}</div>`;
-  if (b.type === 'video') return `<div class="block">${mediaHTML(b)}</div>`;
+  if (b.type === 'full' || b.type === 'video') {
+    return `<div class="block">${mediaHTML(b)}</div>`;
+  }
   return '';
 }
 
 function mediaHTML(m) {
+  const cap = m.caption ? `<figcaption>${m.caption}</figcaption>` : '';
+
   // Video
   if (m.youtube) {
-    const cap = m.caption ? `<figcaption>${m.caption}</figcaption>` : '';
     const start = m.start ? `&start=${m.start}` : '';
     return `
       <figure class="media reveal">
         <div class="video">
           <iframe
-            src="https://www.youtube.com/embed/${m.youtube}?rel=0&modestbranding=1${start}"
+            src="https://www.youtube.com/embed/${m.youtube}?rel=0&modestbranding=1&playsinline=1${start}"
             title="YouTube video"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             referrerpolicy="strict-origin-when-cross-origin"
@@ -526,7 +546,6 @@ function mediaHTML(m) {
   // Image (optionally cropped to a fixed shape)
   const crop = m.ratio ? ' crop' : '';
   const style = m.ratio ? ` style="aspect-ratio:${m.ratio}"` : '';
-  const cap = m.caption ? `<figcaption>${m.caption}</figcaption>` : '';
   return `
     <figure class="media reveal">
       <div class="frame${crop}"${style}>
@@ -571,7 +590,32 @@ function stopVideos() {
 }
 
 // --------------------------------------------------
-//  NEGATIVE CURSOR (HTML element, mix-blend-mode: difference)
+//  INPUT: works for mouse, touch and pen
+//  Uses the tap's own coordinates, so no hover is needed
+// --------------------------------------------------
+function setupInput(el) {
+  // Touch: half goes negative while a finger is on it
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse') touchHold = halfAt(e.clientX, e.clientY);
+  });
+  const release = () => (touchHold = null);
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  el.addEventListener('pointerleave', release);
+
+  // The actual action happens on click (fires for both mouse and tap)
+  el.addEventListener('click', (e) => handleTap(e.clientX, e.clientY));
+}
+
+function handleTap(x, y) {
+  if (!ready || labState !== 'closed') return;
+  const key = halfAt(x, y);
+  if (key === 'lab') openLab();
+  else if (key === 'about') active = active === 'about' ? null : 'about';
+}
+
+// --------------------------------------------------
+//  NEGATIVE CURSOR (desktop only)
 // --------------------------------------------------
 function setupCursor() {
   cursorEl = createDiv('');
@@ -598,6 +642,8 @@ function setupCursor() {
 }
 
 function updateCursor() {
+  if (!cursorEl) return;
+
   cx = lerp(cx, mx, CURSOR_FOLLOW);
   cy = lerp(cy, my, CURSOR_FOLLOW);
 
@@ -614,15 +660,8 @@ function updateCursor() {
 }
 
 // --------------------------------------------------
-//  INTERACTION
+//  KEYS + RESIZE
 // --------------------------------------------------
-function handleCanvasClick() {
-  if (!ready || labState !== 'closed') return;
-  const key = halfAt(mx, my);
-  if (key === 'lab') openLab();
-  else if (key === 'about') active = active === 'about' ? null : 'about';
-}
-
 function keyPressed() {
   if (keyCode === ESCAPE) {
     if (labState === 'open') closeLab();
@@ -632,8 +671,9 @@ function keyPressed() {
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
-  if (bgImg) {
-    buildBuffers();
-    buildAboutLayout();
-  }
+  if (!bgImg) return;
+  buildAboutLayout();
+  // Mobile address bars fire lots of resizes, so wait until they settle
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(buildBuffers, 150);
 }
