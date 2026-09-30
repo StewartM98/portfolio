@@ -3,15 +3,24 @@ html, body {
   padding: 0;
   overflow: hidden;
   background: #000;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 *, *::before, *::after {
   box-sizing: border-box;
-  cursor: none !important;
+}
+
+/* Hide the system cursor only on devices that actually have one */
+@media (hover: hover) {
+  *, *::before, *::after {
+    cursor: none !important;
+  }
 }
 
 canvas {
   display: block;
+  touch-action: manipulation;   /* removes tap delay on mobile */
 }
 
 /* ---------- Negative cursor ---------- */
@@ -30,6 +39,10 @@ canvas {
   transition: opacity 0.2s ease;
 }
 
+@media (hover: none) {
+  #cursor { display: none; }
+}
+
 /* ---------- LAB overlay ---------- */
 #lab {
   --gutter: clamp(16px, 3vw, 40px);        /* page edges + gap between columns */
@@ -44,6 +57,9 @@ canvas {
   color: #000;
   overflow-y: auto;
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: manipulation;
   font-family: Helvetica, Arial, sans-serif;
   font-weight: bold;
   text-transform: uppercase;
@@ -80,11 +96,20 @@ canvas {
   z-index: 5;
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 28px var(--gutter);
+  padding-top: max(28px, env(safe-area-inset-top));
   font-size: 14px;
   letter-spacing: 0.04em;
   color: #fff;
   mix-blend-mode: difference;
+}
+
+/* Bigger tap areas without changing the look */
+#lab .lab-header button,
+#lab .lab-footer button {
+  padding: 12px;
+  margin: -12px;
 }
 
 #lab .lab-main {
@@ -220,14 +245,19 @@ canvas {
   display: flex;
   justify-content: center;
   padding: 40px var(--gutter) 120px;
+  padding-bottom: max(120px, env(safe-area-inset-bottom));
   font-size: 14px;
   letter-spacing: 0.04em;
 }
 
 /* ---------- Mobile: single column ---------- */
 @media (max-width: 700px) {
-  #lab .lab-header { padding: 20px 16px; }
+  #lab .lab-header {
+    padding: 20px 16px;
+    padding-top: max(20px, env(safe-area-inset-top));
+  }
   #lab .lab-main   { padding: 100px 16px 60px; }
+  #lab .project + .project { margin-top: 120px; }
 
   #lab .project-info {
     grid-template-columns: 1fr;
