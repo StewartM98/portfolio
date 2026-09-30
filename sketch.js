@@ -72,7 +72,6 @@ const ABOUT_VERSIONS = {
 //  LAB PROJECTS
 //  blocks:
 //    grid  { left: [media], right: [media], offset: 'left' | 'right' }
-//          -> two columns; the offset column starts lower (staggered)
 //    full  { src, ratio?, alt? }            -> one image, full width
 //    video { youtube, start?, caption? }    -> full-width YouTube embed
 //  media items inside a grid:
@@ -144,36 +143,46 @@ const LAB_PROJECTS = [
       { type: 'video', youtube: 'KjJ92yjW-ZI', start: 401, caption: 'Performance' },
     ],
   },
+
+  // ---------------- PAST POEMS ----------------
+  {
+    year: '2022',
+    title: 'Past Poems',
+    meta: [
+      'Generative typography, custom software, two screens',
+      'dimensions variable',
+    ],
+    text: [
+      'Past Poems focuses on processing grief and loss after my gran passed away earlier in the year. She had a love for reading and would often write short stories or poems in her spare time.',
+      "The two screens display a speech and poem she had written. The subjects of which showcased another two of her interests, golfing, to which she was the women's captain of Hamilton Golf Club and gardening. The floral patterns present in the visuals also represent her love for gardening.",
+      'Dedicated to Jean Marshall.',
+    ],
+    blocks: [
+      {
+        type: 'grid',
+        offset: 'left',
+        left: [
+          { src: '66558972162__c43aaf1b-1e49-4de9-811c-fc9ab542324f.jpg', ratio: '3 / 4', alt: 'Past Poems: two screens with words forming a pinwheel' },
+        ],
+        right: [
+          { src: '66559240963__48e2c710-e167-4a04-a8da-37d1425dcef7 (1).jpg', ratio: '3 / 4', alt: 'Past Poems: two screens with words radiating outward' },
+        ],
+      },
+      { type: 'full', src: '66558990572__52642c7b-4e37-4176-bc4c-6f0751080cce.jpg', alt: 'Past Poems: words forming spiral and floral patterns across two screens' },
+      {
+        type: 'grid',
+        offset: 'right',
+        left: [
+          { src: '66560471112__edfc0b55-a221-4f55-a86a-368c4d59afdc.jpg', ratio: '3 / 4', alt: 'Close-up of the poem in serif type' },
+        ],
+        right: [
+          { src: 'noise.webp', ratio: '3 / 4', alt: 'Past Poems: single screen with scattered words' },
+        ],
+      },
+      { type: 'video', youtube: '8RTh2li_8tc', start: 3, caption: 'Past Poems' },
+    ],
+  },
 ];
-
-// ==================================================
-let bgImg;
-let normalBuf, invertBuf;
-let ready = false;
-let hovered = null;          // 'about' | 'lab' | null
-let active = null;           // 'about' when bio is showing
-let aboutLayout;
-let touchHold = null;        // half currently under a finger (touch devices)
-let resizeTimer;
-
-// LAB state: 'closed' | 'opening' | 'open' | 'closingOverlay' | 'closing'
-let labState = 'closed';
-let expand = 0;
-let labEl, revealObserver;
-
-// Cursor (desktop only)
-let cursorEl = null;
-let mx = -100, my = -100;
-let cx = -100, cy = -100;
-let cSize = CURSOR_SIZE;
-let cursorVisible = false;
-let pressing = false;
-let overLink = false;
-
-const halves = {
-  about: { label: 'ABOUT', inv: 0, white: 0, master: 0, t: 0 },
-  lab:   { label: 'LAB',   inv: 0, white: 0 },
-};
 
 // --------------------------------------------------
 function setup() {
