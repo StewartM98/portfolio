@@ -21,22 +21,11 @@ const CURSOR_PRESS_SIZE = 12;
 const CURSOR_FOLLOW     = 0.5;
 const CURSOR_SIZE_EASE  = 0.2;
 
+// Touch
+const TAP_MOVE_LIMIT = 12;   // px a finger can move and still count as a tap
+
 // Touch devices (phones/tablets): no hover, no custom cursor
 const IS_TOUCH = window.matchMedia('(hover: none)').matches;
-
-// Add a mobile viewport tag (the editor's index.html doesn't have one).
-// Runs immediately, before p5 measures the window.
-addViewportMeta();
-
-function addViewportMeta() {
-  let m = document.querySelector('meta[name="viewport"]');
-  if (!m) {
-    m = document.createElement('meta');
-    m.name = 'viewport';
-    document.head.appendChild(m);
-  }
-  m.content = 'width=device-width, initial-scale=1, viewport-fit=cover';
-}
 
 // ==================================================
 //  ABOUT COPY: pick 'A', 'B', 'C' or 'D'
@@ -79,6 +68,7 @@ const ABOUT_VERSIONS = {
 //    { youtube, start?, caption? }          -> video (start = seconds)
 // ==================================================
 const LAB_PROJECTS = [
+  // ---------------- ECHOS AND BONDS ----------------
   {
     year: '2024',
     title: 'Echos and Bonds',
@@ -184,6 +174,36 @@ const LAB_PROJECTS = [
   },
 ];
 
+// ==================================================
+let bgImg;
+let normalBuf, invertBuf;
+let ready = false;
+let hovered = null;          // 'about' | 'lab' | null
+let active = null;           // 'about' when bio is showing
+let aboutLayout;
+let touchHold = null;        // half currently under a finger
+let lastTouchTime = 0;       // used to ignore the browser's fake click after a touch
+let resizeTimer;
+
+// LAB state: 'closed' | 'opening' | 'open' | 'closingOverlay' | 'closing'
+let labState = 'closed';
+let expand = 0;
+let labEl, revealObserver;
+
+// Cursor (desktop only)
+let cursorEl = null;
+let mx = -100, my = -100;
+let cx = -100, cy = -100;
+let cSize = CURSOR_SIZE;
+let cursorVisible = false;
+let pressing = false;
+let overLink = false;
+
+const halves = {
+  about: { label: 'ABOUT', inv: 0, white: 0, master: 0, t: 0 },
+  lab:   { label: 'LAB',   inv: 0, white: 0 },
+};
+
 // --------------------------------------------------
 function setup() {
   const cnv = createCanvas(windowWidth, windowHeight);
@@ -207,7 +227,6 @@ function setup() {
 //  Background buffers
 // --------------------------------------------------
 function buildBuffers() {
-  // Remove old buffers so resizing doesn't pile up memory
   if (normalBuf) normalBuf.remove();
   if (invertBuf) invertBuf.remove();
 
@@ -348,7 +367,7 @@ function draw() {
   // Hover on desktop, finger-down on touch
   hovered = null;
   if (labState === 'closed') {
-    if (IS_TOUCH) hovered = touchHold;
+    if (touchHold) hovered = touchHold;
     else if (cursorVisible) hovered = halfAt(mx, my);
   }
 
@@ -558,7 +577,7 @@ function mediaHTML(m) {
   return `
     <figure class="media reveal">
       <div class="frame${crop}"${style}>
-        <img src="${encodeURI(m.src)}" alt="${m.alt || ''}" decoding="async">
+        <img src="${encodeURI(m.src)}" alt="${m.alt || ''}" loading="lazy" decoding="async">
       </div>
       ${cap}
     </figure>`;
@@ -599,21 +618,49 @@ function stopVideos() {
 }
 
 // --------------------------------------------------
-//  INPUT: works for mouse, touch and pen
-//  Uses the tap's own coordinates, so no hover is needed
+//  INPUT
+//  Touch: handled directly on touchend (one tap, no fake hover)
+//  Mouse: handled on click
 // --------------------------------------------------
 function setupInput(el) {
-  // Touch: half goes negative while a finger is on it
-  el.addEventListener('pointerdown', (e) => {
-    if (e.pointerType !== 'mouse') touchHold = halfAt(e.clientX, e.clientY);
-  });
-  const release = () => (touchHold = null);
-  el.addEventListener('pointerup', release);
-  el.addEventListener('pointercancel', release);
-  el.addEventListener('pointerleave', release);
+  let start = null;
 
-  // The actual action happens on click (fires for both mouse and tap)
-  el.addEventListener('click', (e) => handleTap(e.clientX, e.clientY));
+  el.addEventListener('touchstart', (e) => {
+    e.preventDefault();                        // stops fake hover + double-tap zoom
+    const t = e.changedTouches[0];
+    start = { x: t.clientX, y: t.clientY };
+    touchHold = halfAt(t.clientX, t.clientY);  // show the negative while pressed
+  }, { passive: false });
+
+  el.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    if (start && Math.hypot(t.clientX - start.x, t.clientY - start.y) > TAP_MOVE_LIMIT) {
+      touchHold = null;                        // finger moved too far: not a tap
+    }
+  }, { passive: false });
+
+  el.addEventListener('touchend', (e) => {
+    e.preventDefault();                        // stops the delayed fake click
+    const t = e.changedTouches[0];
+    const isTap = start &&
+      Math.hypot(t.clientX - start.x, t.clientY - start.y) <= TAP_MOVE_LIMIT;
+    start = null;
+    touchHold = null;
+    lastTouchTime = Date.now();
+    if (isTap) handleTap(t.clientX, t.clientY);
+  }, { passive: false });
+
+  el.addEventListener('touchcancel', () => {
+    start = null;
+    touchHold = null;
+  });
+
+  // Mouse / trackpad
+  el.addEventListener('click', (e) => {
+    if (Date.now() - lastTouchTime < 800) return;   // ignore clicks caused by a touch
+    handleTap(e.clientX, e.clientY);
+  });
 }
 
 function handleTap(x, y) {
@@ -624,13 +671,14 @@ function handleTap(x, y) {
 }
 
 // --------------------------------------------------
-//  NEGATIVE CURSOR (desktop only)
+//  NEGATIVE CURSOR (real mouse only)
 // --------------------------------------------------
 function setupCursor() {
   cursorEl = createDiv('');
   cursorEl.id('cursor');
 
   const track = (e) => {
+    if (e.pointerType !== 'mouse') return;   // ignore touch and pen
     mx = e.clientX;
     my = e.clientY;
     if (!cursorVisible) {
@@ -643,6 +691,7 @@ function setupCursor() {
 
   document.addEventListener('pointermove', track);
   document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse') return;
     track(e);
     pressing = true;
   });
